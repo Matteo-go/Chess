@@ -1,0 +1,12 @@
+# Librairie principale pour l'affichage graphique
+pygame>=2.5,<3.0
+
+# Librairies utiles pour la logique du jeu, le typage et les outils internes
+numpy>=1.24,<2.0          # Pour le traitement de données plus rapide (plateau, IA)
+typing-extensions>=4.0    # Pour compatibilité typage si Python < 3.11
+
+# Pour construire un moteur d'évaluation plus intelligent
+scikit-learn>=1.3         # (optionnel, uniquement si IA avec ML supervisé)
+
+# Pour profilage/performance
+rich>=13.0                # Joli affichage console (logs, tableaux)
