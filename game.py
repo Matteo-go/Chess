@@ -21,7 +21,7 @@ def format_time(seconds):
     return f"{minutes:02}:{seconds:02}"
 
 class Game:
-    def __init__(self, game_mode="1v1", theme=((186, 202, 68), (118, 150, 86)), time_limit=300):
+    def __init__(self, game_mode="1v1 Local", theme=((186, 202, 68), (118, 150, 86)), time_limit=300):
         self.board = [[None for _ in range(BOARD_COLS)] for _ in range(BOARD_ROWS)]
         self.turn = "white"
         self.selected_piece = None

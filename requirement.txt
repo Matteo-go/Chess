@@ -10,3 +10,5 @@ scikit-learn>=1.3         # (optionnel, uniquement si IA avec ML supervisé)
 
 # Pour profilage/performance
 rich>=13.0                # Joli affichage console (logs, tableaux)
+
+requests>=2.31           # Pour les requêtes HTTP (API, etc.)
