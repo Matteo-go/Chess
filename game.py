@@ -56,10 +56,9 @@ class Game:
             self.board[6][col] = Pawn("white", col, 6)
 
     def update_clock(self):
-
         if self.game_over:
             return
-        
+
         now = pygame.time.get_ticks()
         elapsed = (now - self.last_tick) / 1000
         self.last_tick = now
@@ -253,17 +252,35 @@ class Game:
                 self.board[piece.row][piece.col] = promoted_piece
 
     def choose_promotion(self, color, col, row):
-        font = pygame.font.SysFont(None, 36)
         screen = pygame.display.get_surface()
-        options = ["Queen", "Rook", "Bishop", "Knight"]
-        rects = []
-        screen.fill((50, 50, 50))
-        for i, name in enumerate(options):
-            text = font.render(name, True, (255, 255, 255))
-            rect = text.get_rect(center=(150, 100 + i * 60))
-            rects.append((rect, name))
-            screen.blit(text, rect)
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        screen.blit(overlay, (0, 0))
+
+        piece_classes = [Queen, Rook, Bishop, Knight]
+        piece_names = ["queen", "rook", "bishop", "knight"]
+
+        popup_width, popup_height = 300, 100
+        popup_x = WIDTH // 2 - popup_width // 2
+        popup_y = HEIGHT // 2 - popup_height // 2
+        popup = pygame.Rect(popup_x, popup_y, popup_width, popup_height)
+
+        pygame.draw.rect(screen, (240, 240, 240), popup, border_radius=12)
+        pygame.draw.rect(screen, (100, 100, 100), popup, 2, border_radius=12)
+
+        spacing = popup_width // 5
+        image_rects = []
+        for i, name in enumerate(piece_names):
+            key = f"{color}-{name}"
+            img = pygame.transform.scale(PIECE_IMAGES[key], (48, 48))
+            x = popup_x + spacing * (i + 1) - 24
+            y = popup_y + popup_height // 2 - 24
+            rect = pygame.Rect(x, y, 48, 48)
+            screen.blit(img, (x, y))
+            image_rects.append((rect, piece_classes[i]))
+
         pygame.display.flip()
+
         while True:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -271,16 +288,10 @@ class Game:
                     exit()
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     pos = pygame.mouse.get_pos()
-                    for rect, name in rects:
+                    for rect, cls in image_rects:
                         if rect.collidepoint(pos):
-                            if name == "Queen":
-                                return Queen(color, col, row)
-                            elif name == "Rook":
-                                return Rook(color, col, row)
-                            elif name == "Bishop":
-                                return Bishop(color, col, row)
-                            elif name == "Knight":
-                                return Knight(color, col, row)
+                            return cls(color, col, row)
+
 
     def get_legal_moves(self, piece):
         all_moves = piece.get_valid_moves(self.board, self.last_move)
