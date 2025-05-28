@@ -1,97 +1,50 @@
 import pygame
 from game_runner import main
+from themes import THEMES_DICT
 from config import WIDTH, HEIGHT
 
 pygame.init()
-FONT = pygame.font.SysFont("arial", 32)
-SMALL_FONT = pygame.font.SysFont("arial", 24)
-
-# Thèmes disponibles : nom → (couleur claire, couleur foncée)
-THEMES = {
-    "Classic": ((240, 217, 181), (181, 136, 99)),
-    "Dark": ((60, 60, 60), (30, 30, 30)),
-    "Green": ((240, 240, 200), (100, 140, 100)),
-    "Violet": ((180, 170, 255), (100, 80, 180)),
-}
-
-def draw_text_centered(surface, text, y, font, color=(255, 255, 255)):
-    label = font.render(text, True, color)
-    x = WIDTH // 2 - label.get_width() // 2
-    surface.blit(label, (x, y))
+FONT = pygame.font.SysFont("Segoe UI", 28)
+TITLE_FONT = pygame.font.SysFont("Segoe UI", 48, bold=True)
 
 def draw_button(surface, rect, text, selected=False):
-    color = (100, 100, 100)
-    if selected:
-        color = (200, 100, 0)
-    pygame.draw.rect(surface, color, rect)
+    base_color = (60, 60, 60)
+    hover_color = (100, 140, 180) if selected else base_color
+    pygame.draw.rect(surface, hover_color, rect, border_radius=10)
     label = FONT.render(text, True, (255, 255, 255))
     surface.blit(label, (
-        rect.x + rect.width // 2 - label.get_width() // 2,
-        rect.y + rect.height // 2 - label.get_height() // 2
+        rect.centerx - label.get_width() // 2,
+        rect.centery - label.get_height() // 2
     ))
 
 def main_menu():
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("Chess - Menu")
+    clock = pygame.time.Clock()
 
-    selected_theme = "Classic"
-    selected_mode = "1v1"
-
-    # Prépare les rectangles de bouton
-    button_width = 300
-    button_height = 50
-    spacing = 20
-
+    selected_theme = "Chess.com"
     theme_buttons = []
-    modes = ["1v1", "Bot (à venir)"]
-    mode_buttons = []
+    play_button = pygame.Rect(WIDTH//2 - 150, HEIGHT - 120, 300, 50)
 
-    start_y = 100
+    for i, name in enumerate(THEMES_DICT.keys()):
+        rect = pygame.Rect(WIDTH//2 - 150, 180 + i * 70, 300, 50)
+        theme_buttons.append((rect, name))
 
-    # Crée les boutons de thème
-    for i, theme_name in enumerate(THEMES):
-        rect = pygame.Rect(
-            WIDTH//2 - button_width//2,
-            start_y + i * (button_height + spacing),
-            button_width,
-            button_height
-        )
-        theme_buttons.append((rect, theme_name))
-
-    # Crée les boutons de mode
-    mode_start_y = start_y + len(theme_buttons)*(button_height + spacing) + 40
-    for i, mode in enumerate(modes):
-        rect = pygame.Rect(
-            WIDTH//2 - button_width//2,
-            mode_start_y + i * (button_height + spacing),
-            button_width,
-            button_height
-        )
-        mode_buttons.append((rect, mode))
-
-    # Bouton "Play"
-    play_button = pygame.Rect(WIDTH//2 - button_width//2, mode_start_y + 2*(button_height + spacing) + 20, button_width, button_height)
+    mode_button_1v1 = pygame.Rect(WIDTH//2 - 150, 180 + len(theme_buttons)*70 + 40, 300, 50)
 
     running = True
     while running:
-        screen.fill((20, 20, 20))
+        screen.fill((25, 25, 25))
+        title = TITLE_FONT.render("Ultimate Chess", True, (255, 255, 255))
+        screen.blit(title, (WIDTH//2 - title.get_width()//2, 60))
 
-        draw_text_centered(screen, "Chess", 30, pygame.font.SysFont("arial", 48))
-
-        # Thème
-        draw_text_centered(screen, "Choose a theme:", start_y - 40, SMALL_FONT)
         for rect, name in theme_buttons:
             draw_button(screen, rect, name, selected=(name == selected_theme))
 
-        # Mode
-        draw_text_centered(screen, "Choose mode:", mode_start_y - 40, SMALL_FONT)
-        for rect, name in mode_buttons:
-            draw_button(screen, rect, name, selected=(name.startswith(selected_mode)))
-
-        # Play
-        draw_button(screen, play_button, "Play")
+        draw_button(screen, mode_button_1v1, "Mode 1v1")
 
         pygame.display.flip()
+        clock.tick(60)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -99,21 +52,52 @@ def main_menu():
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 pos = pygame.mouse.get_pos()
-                # Sélection thème
                 for rect, name in theme_buttons:
                     if rect.collidepoint(pos):
                         selected_theme = name
+                if mode_button_1v1.collidepoint(pos):
+                    time_selection_screen("1v1", THEMES_DICT[selected_theme])
 
-                # Sélection mode
-                for rect, name in mode_buttons:
+def time_selection_screen(mode, theme):
+    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    clock = pygame.time.Clock()
+    FONT = pygame.font.SysFont("Segoe UI", 28)
+    TITLE_FONT = pygame.font.SysFont("Segoe UI", 42, bold=True)
+
+    times = [60, 180, 300, 600, 1800]  # 1m, 3m, 5m, 10m, 30m
+    labels = ["1 min", "3 min", "5 min", "10 min", "30 min"]
+    buttons = []
+
+    for i, label in enumerate(labels):
+        rect = pygame.Rect(WIDTH//2 - 100, 150 + i * 70, 200, 50)
+        buttons.append((rect, label, times[i]))
+
+    launch_button = pygame.Rect(WIDTH//2 - 120, HEIGHT - 100, 240, 50)
+
+    selected_time = None
+
+    running = True
+    while running:
+        screen.fill((30, 30, 30))
+        title = TITLE_FONT.render("Choisis le temps", True, (255, 255, 255))
+        screen.blit(title, (WIDTH//2 - title.get_width()//2, 60))
+
+        for rect, label, time_val in buttons:
+            draw_button(screen, rect, label, selected=(selected_time == time_val))
+
+        draw_button(screen, launch_button, "Lancer la partie")
+
+        pygame.display.flip()
+        clock.tick(60)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                pos = pygame.mouse.get_pos()
+                for rect, label, time_val in buttons:
                     if rect.collidepoint(pos):
-                        if name.startswith("1v1"):
-                            selected_mode = "1v1"
-                        else:
-                            selected_mode = "bot"  # Placeholder
-
-                # Lancer jeu
-                if play_button.collidepoint(pos):
-                    from themes import THEMES_DICT
-                    main(game_mode=selected_mode, theme=THEMES_DICT[selected_theme])
+                        selected_time = time_val
+                if launch_button.collidepoint(pos) and selected_time:
+                    main(mode, theme, selected_time)
                     return

@@ -5,7 +5,7 @@ class King(Piece):
         super().__init__(color, col, row)
         self.name = "king"
 
-    def get_valid_moves(self, board):
+    def get_valid_moves(self, board, last_move):
         moves = []
         for dr in [-1, 0, 1]:
             for dc in [-1, 0, 1]:

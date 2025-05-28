@@ -4,9 +4,8 @@ from config import BOARD_ROWS, BOARD_COLS, SQUARE_SIZE, WIDTH, HEIGHT, BOARD_OFF
 from pieces import Pawn, Rook, Knight, Bishop, Queen, King
 
 pygame.init()
-FONT = pygame.font.SysFont("Segoe UI", 20)
-TITLE_FONT = pygame.font.SysFont("Segoe UI", 36, bold=True)
-
+FONT = pygame.font.SysFont("Segoe UI", 24)
+TITLE_FONT = pygame.font.SysFont("Segoe UI", 48, bold=True)
 PIECE_IMAGES = {}
 
 def load_images():
@@ -16,33 +15,76 @@ def load_images():
             img = pygame.image.load(os.path.join("assets/images", file))
             PIECE_IMAGES[name] = pygame.transform.smoothscale(img, (SQUARE_SIZE, SQUARE_SIZE))
 
+def format_time(seconds):
+    minutes = int(seconds) // 60
+    seconds = int(seconds) % 60
+    return f"{minutes:02}:{seconds:02}"
+
 class Game:
-    def __init__(self, game_mode="1v1", theme=((186, 202, 68), (118, 150, 86))):
+    def __init__(self, game_mode="1v1", theme=((186, 202, 68), (118, 150, 86)), time_limit=300):
         self.board = [[None for _ in range(BOARD_COLS)] for _ in range(BOARD_ROWS)]
+        self.turn = "white"
         self.selected_piece = None
         self.valid_moves = []
-        self.turn = "white"
+        self.captured_white = []
+        self.captured_black = []
+        self.theme = theme
+        self.light_color, self.dark_color = theme
+        self.quit_button_rect = pygame.Rect(WIDTH - 140, HEIGHT - 70, 110, 40)
+        self.back_to_menu_button_rect = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 + 50, 200, 50)
+        self.last_move = None
         self.game_over = False
         self.winner = None
         self.quit_popup = False
-        self.light_color, self.dark_color = theme
-        self.game_mode = game_mode
-        self.back_to_menu_button_rect = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 + 50, 200, 50)
-        self.quit_button_rect = pygame.Rect(WIDTH - 140, 30, 110, 40)
-        self.captured_white = []
-        self.captured_black = []
+
+        # TIMERS
+        self.time_limit = time_limit
+        self.white_time = time_limit
+        self.black_time = time_limit
+        self.last_tick = pygame.time.get_ticks()
+
         load_images()
         self.setup_board()
 
     def setup_board(self):
-        for col in range(BOARD_COLS):
-            self.board[1][col] = Pawn("black", col, 1)
-            self.board[6][col] = Pawn("white", col, 6)
-
         order = [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook]
         for col, cls in enumerate(order):
             self.board[0][col] = cls("black", col, 0)
             self.board[7][col] = cls("white", col, 7)
+        for col in range(BOARD_COLS):
+            self.board[1][col] = Pawn("black", col, 1)
+            self.board[6][col] = Pawn("white", col, 6)
+
+    def update_clock(self):
+
+        if self.game_over:
+            return
+        
+        now = pygame.time.get_ticks()
+        elapsed = (now - self.last_tick) / 1000
+        self.last_tick = now
+        if self.turn == "white":
+            self.white_time = max(0, self.white_time - elapsed)
+            if self.white_time == 0:
+                self.game_over = True
+                self.winner = "Black"
+        else:
+            self.black_time = max(0, self.black_time - elapsed)
+            if self.black_time == 0:
+                self.game_over = True
+                self.winner = "White"
+
+    def draw(self, win):
+        win.fill((30, 30, 30))
+        self.draw_board(win)
+        self.draw_pieces(win)
+        self.draw_captured(win)
+        self.draw_timers(win)
+        self.draw_quit_button(win)
+        if self.quit_popup:
+            self.draw_quit_popup(win)
+        if self.game_over:
+            self.display_winner(win)
 
     def draw_board(self, win):
         for row in range(BOARD_ROWS):
@@ -52,11 +94,9 @@ class Game:
                 y = BOARD_OFFSET_Y + row * SQUARE_SIZE
                 pygame.draw.rect(win, color, (x, y, SQUARE_SIZE, SQUARE_SIZE), border_radius=6)
 
-        # Coordonnées
         for i in range(BOARD_ROWS):
             label = FONT.render(str(8 - i), True, (30, 30, 30))
             win.blit(label, (BOARD_OFFSET_X - 20, BOARD_OFFSET_Y + i * SQUARE_SIZE + 5))
-
         for j in range(BOARD_COLS):
             label = FONT.render(chr(ord('a') + j), True, (30, 30, 30))
             win.blit(label, (BOARD_OFFSET_X + j * SQUARE_SIZE + SQUARE_SIZE - 20, BOARD_OFFSET_Y + BOARD_ROWS * SQUARE_SIZE + 5))
@@ -84,16 +124,22 @@ class Game:
 
         for i, piece in enumerate(self.captured_white):
             key = f"black-{piece}"
-            y = y_start + (i * 30)
-            win.blit(pygame.transform.scale(PIECE_IMAGES[key], (28, 28)), (x_left, y))
-
+            win.blit(pygame.transform.scale(PIECE_IMAGES[key], (28, 28)), (x_left, y_start + i * 30))
         for i, piece in enumerate(self.captured_black):
             key = f"white-{piece}"
-            y = y_start + (i * 30)
-            win.blit(pygame.transform.scale(PIECE_IMAGES[key], (28, 28)), (x_right, y))
+            win.blit(pygame.transform.scale(PIECE_IMAGES[key], (28, 28)), (x_right, y_start + i * 30))
+
+    def draw_timers(self, win):
+        font = pygame.font.SysFont("Segoe UI", 28, bold=True)
+        white_label = font.render(format_time(self.white_time), True, (255, 255, 255))
+        black_label = font.render(format_time(self.black_time), True, (255, 255, 255))
+        center_x = WIDTH // 2
+        win.blit(white_label, (center_x - white_label.get_width() - 150, 20))
+        win.blit(black_label, (center_x + 150, 20))
+
 
     def draw_quit_button(self, win):
-        pygame.draw.rect(win, (200, 0, 0), self.quit_button_rect, border_radius=8)
+        pygame.draw.rect(win, (180, 0, 0), self.quit_button_rect, border_radius=10)
         label = FONT.render("Quitter", True, (255, 255, 255))
         win.blit(label, (
             self.quit_button_rect.centerx - label.get_width() // 2,
@@ -101,44 +147,50 @@ class Game:
         ))
 
     def draw_quit_popup(self, win):
-        popup_rect = pygame.Rect(WIDTH // 2 - 150, HEIGHT // 2 - 60, 300, 120)
-        pygame.draw.rect(win, (50, 50, 50), popup_rect, border_radius=12)
-        pygame.draw.rect(win, (220, 220, 220), popup_rect, 2)
-
+        popup = pygame.Rect(WIDTH // 2 - 150, HEIGHT // 2 - 60, 300, 120)
+        pygame.draw.rect(win, (50, 50, 50), popup, border_radius=12)
+        pygame.draw.rect(win, (200, 200, 200), popup, 2)
         label = FONT.render("Voulez-vous abandonner ?", True, (255, 255, 255))
-        win.blit(label, (popup_rect.centerx - label.get_width() // 2, popup_rect.y + 15))
-
-        self.yes_button = pygame.Rect(popup_rect.x + 40, popup_rect.y + 70, 80, 30)
-        self.no_button = pygame.Rect(popup_rect.x + 180, popup_rect.y + 70, 80, 30)
-
-        pygame.draw.rect(win, (120, 180, 120), self.yes_button, border_radius=6)
-        pygame.draw.rect(win, (180, 80, 80), self.no_button, border_radius=6)
-
-        win.blit(FONT.render("Oui", True, (255, 255, 255)), (self.yes_button.x + 22, self.yes_button.y + 5))
+        win.blit(label, (popup.centerx - label.get_width() // 2, popup.y + 15))
+        self.yes_button = pygame.Rect(popup.x + 40, popup.y + 70, 80, 30)
+        self.no_button = pygame.Rect(popup.x + 180, popup.y + 70, 80, 30)
+        pygame.draw.rect(win, (100, 100, 100), self.yes_button, border_radius=6)
+        pygame.draw.rect(win, (100, 100, 100), self.no_button, border_radius=6)
+        win.blit(FONT.render("Oui", True, (255, 255, 255)), (self.yes_button.x + 20, self.yes_button.y + 5))
         win.blit(FONT.render("Non", True, (255, 255, 255)), (self.no_button.x + 18, self.no_button.y + 5))
 
-    def draw(self, win):
-        win.fill((240, 240, 240))  # fond doux
-        self.draw_board(win)
-        self.draw_pieces(win)
-        self.draw_captured(win)
-        self.draw_quit_button(win)
-        if self.quit_popup:
-            self.draw_quit_popup(win)
-        if self.game_over:
-            self.display_winner(win)
-
     def display_winner(self, win):
-        win.fill((0, 0, 0))
-        label = TITLE_FONT.render(f"{self.winner} wins!" if self.winner else "Draw!", True, (255, 255, 255))
-        win.blit(label, (WIDTH // 2 - label.get_width() // 2, HEIGHT // 2 - 80))
+        popup_width, popup_height = 400, 200
+        popup_x = WIDTH // 2 - popup_width // 2
+        popup_y = HEIGHT // 2 - popup_height // 2
 
-        pygame.draw.rect(win, (60, 60, 60), self.back_to_menu_button_rect, border_radius=10)
-        btn_label = FONT.render("Retour au menu", True, (255, 255, 255))
-        win.blit(btn_label, (
-            self.back_to_menu_button_rect.centerx - btn_label.get_width() // 2,
-            self.back_to_menu_button_rect.centery - btn_label.get_height() // 2
+        popup = pygame.Rect(popup_x, popup_y, popup_width, popup_height)
+
+        # Fond semi-transparent
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))  # noir semi-transparent
+        win.blit(overlay, (0, 0))
+
+        # Boîte de victoire
+        pygame.draw.rect(win, (245, 245, 245), popup, border_radius=15)
+        pygame.draw.rect(win, (80, 80, 80), popup, 3, border_radius=15)
+
+        text = f"{self.winner} wins!" if self.winner else "Draw"
+        label = TITLE_FONT.render(text, True, (30, 30, 30))
+        win.blit(label, (
+            popup.centerx - label.get_width() // 2,
+            popup.y + 30
         ))
+
+        # Bouton retour au menu
+        self.back_to_menu_button_rect = pygame.Rect(popup.centerx - 100, popup.bottom - 60, 200, 40)
+        pygame.draw.rect(win, (100, 100, 255), self.back_to_menu_button_rect, border_radius=8)
+        btn_text = FONT.render("Retour au menu", True, (255, 255, 255))
+        win.blit(btn_text, (
+            self.back_to_menu_button_rect.centerx - btn_text.get_width() // 2,
+            self.back_to_menu_button_rect.centery - btn_text.get_height() // 2
+        ))
+
 
     def handle_click(self, pos):
         if self.quit_popup:
@@ -151,6 +203,9 @@ class Game:
             return
 
         if self.game_over:
+            if self.back_to_menu_button_rect.collidepoint(pos):
+                import menu
+                menu.main_menu()
             return
 
         if self.quit_button_rect.collidepoint(pos):
@@ -173,7 +228,9 @@ class Game:
                             self.captured_white.append(target.name)
                     self.move_piece(self.selected_piece, row, col)
                     self.handle_promotion(self.selected_piece)
+                    self.update_clock()
                     self.turn = "black" if self.turn == "white" else "white"
+                    self.last_tick = pygame.time.get_ticks()
                     self.check_game_end()
                 self.selected_piece = None
                 self.valid_moves = []
@@ -186,14 +243,47 @@ class Game:
         piece.row = row
         piece.col = col
         self.board[row][col] = piece
+        self.last_move = (piece, piece.row, piece.col, row, col)
 
     def handle_promotion(self, piece):
         if piece.name == "pawn":
-            if (piece.color == "white" and piece.row == 0) or (piece.color == "black" and piece.row == BOARD_ROWS - 1):
-                self.board[piece.row][piece.col] = Queen(piece.color, piece.col, piece.row)
+            is_promotion_row = (piece.color == "white" and piece.row == 0) or (piece.color == "black" and piece.row == BOARD_ROWS - 1)
+            if is_promotion_row:
+                promoted_piece = self.choose_promotion(piece.color, piece.col, piece.row)
+                self.board[piece.row][piece.col] = promoted_piece
+
+    def choose_promotion(self, color, col, row):
+        font = pygame.font.SysFont(None, 36)
+        screen = pygame.display.get_surface()
+        options = ["Queen", "Rook", "Bishop", "Knight"]
+        rects = []
+        screen.fill((50, 50, 50))
+        for i, name in enumerate(options):
+            text = font.render(name, True, (255, 255, 255))
+            rect = text.get_rect(center=(150, 100 + i * 60))
+            rects.append((rect, name))
+            screen.blit(text, rect)
+        pygame.display.flip()
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    exit()
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    pos = pygame.mouse.get_pos()
+                    for rect, name in rects:
+                        if rect.collidepoint(pos):
+                            if name == "Queen":
+                                return Queen(color, col, row)
+                            elif name == "Rook":
+                                return Rook(color, col, row)
+                            elif name == "Bishop":
+                                return Bishop(color, col, row)
+                            elif name == "Knight":
+                                return Knight(color, col, row)
 
     def get_legal_moves(self, piece):
-        all_moves = piece.get_valid_moves(self.board)
+        all_moves = piece.get_valid_moves(self.board, self.last_move)
         legal_moves = []
         for move in all_moves:
             backup = self.board[move[0]][move[1]]
@@ -217,11 +307,10 @@ class Game:
                     break
         if not king:
             return True
-
         for row in self.board:
             for piece in row:
                 if piece and piece.color != color:
-                    if (king.row, king.col) in piece.get_valid_moves(self.board):
+                    if (king.row, king.col) in piece.get_valid_moves(self.board, self.last_move):
                         return True
         return False
 

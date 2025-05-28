@@ -5,13 +5,13 @@ class Queen(Piece):
         super().__init__(color, col, row)
         self.name = "queen"
 
-    def get_valid_moves(self, board):
+    def get_valid_moves(self, board, last_move):
         return self.slide_moves(board, [
             (1, 0), (-1, 0), (0, 1), (0, -1),
             (1, 1), (1, -1), (-1, 1), (-1, -1)
         ])
 
-    def slide_moves(self, board, directions):
+    def slide_moves(self, board, directions, last_move=None):
         moves = []
         for dr, dc in directions:
             r, c = self.row + dr, self.col + dc

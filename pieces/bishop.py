@@ -5,7 +5,7 @@ class Bishop(Piece):
         super().__init__(color, col, row)
         self.name = "bishop"
 
-    def get_valid_moves(self, board):
+    def get_valid_moves(self, board, last_move):
         return self.slide_moves(board, [(1, 1), (1, -1), (-1, 1), (-1, -1)])
 
     def slide_moves(self, board, directions):

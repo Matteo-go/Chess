@@ -1,32 +1,27 @@
 import pygame
-from game import Game
 from config import WIDTH, HEIGHT
+from game import Game
 
-pygame.init()
-SCREEN = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Chess")
-
-def main(game_mode, theme):
+def main(mode, theme, time_limit):
+    pygame.init()
+    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    pygame.display.set_caption("Chess")
     clock = pygame.time.Clock()
-    FPS = 60
-    game = Game(game_mode, theme)
-    running = True
+    game = Game(mode, theme, time_limit)
 
+    running = True
     while running:
-        clock.tick(FPS)
+        clock.tick(60)
+        game.update_clock()
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            elif event.type == pygame.MOUSEBUTTONDOWN:
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 pos = pygame.mouse.get_pos()
-                if game.game_over and game.back_to_menu_button_rect.collidepoint(pos):
-                    from menu import main_menu
-                    main_menu()
-                    return
-                else:
-                    game.handle_click(pos)
+                game.handle_click(pos)
 
-        game.draw(SCREEN)
+        game.draw(screen)
         pygame.display.flip()
 
     pygame.quit()

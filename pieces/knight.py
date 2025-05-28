@@ -5,7 +5,7 @@ class Knight(Piece):
         super().__init__(color, col, row)
         self.name = "knight"
 
-    def get_valid_moves(self, board):
+    def get_valid_moves(self, board, last_move):
         moves = []
         directions = [(2, 1), (2, -1), (-2, 1), (-2, -1),
                       (1, 2), (-1, 2), (1, -2), (-1, -2)]
