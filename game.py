@@ -2,6 +2,10 @@ import pygame
 import os
 from config import BOARD_ROWS, BOARD_COLS, SQUARE_SIZE, WIDTH, HEIGHT, BOARD_OFFSET_X, BOARD_OFFSET_Y
 from pieces import Pawn, Rook, Knight, Bishop, Queen, King
+import websocket
+import threading
+import json
+import time
 
 pygame.init()
 FONT = pygame.font.SysFont("Segoe UI", 24)
@@ -21,7 +25,8 @@ def format_time(seconds):
     return f"{minutes:02}:{seconds:02}"
 
 class Game:
-    def __init__(self, game_mode="1v1 Local", theme=((186, 202, 68), (118, 150, 86)), time_limit=300):
+    def __init__(self, game_mode="1v1 Local", theme=((186, 202, 68), (118, 150, 86)), time_limit=300, auth_data=None, game_id=None, player_color=None):
+        self.auth_data = auth_data
         self.board = [[None for _ in range(BOARD_COLS)] for _ in range(BOARD_ROWS)]
         self.turn = "white"
         self.selected_piece = None
@@ -37,11 +42,28 @@ class Game:
         self.winner = None
         self.quit_popup = False
 
+
         # TIMERS
         self.time_limit = time_limit
         self.white_time = time_limit
         self.black_time = time_limit
         self.last_tick = pygame.time.get_ticks()
+
+        # ONLINE GAME
+        self.online = game_mode == "online"
+        self.game_id = game_id
+        self.ws = None
+        self.player_color = player_color
+        self.my_color = player_color if self.online else None
+
+        if self.online:
+            self.connect_websocket()
+            if auth_data and "user_id" in auth_data:
+                self.player_white_id = auth_data["user_id"] if player_color == "white" else None
+                self.my_color = player_color
+            else:
+                print("❌ Erreur : 'user_id' manquant dans auth_data :", auth_data)
+
 
         load_images()
         self.setup_board()
@@ -60,18 +82,40 @@ class Game:
             return
 
         now = pygame.time.get_ticks()
-        elapsed = (now - self.last_tick) / 1000
+        elapsed = (now - self.last_tick) / 1000  # en secondes
         self.last_tick = now
-        if self.turn == "white":
-            self.white_time = max(0, self.white_time - elapsed)
-            if self.white_time == 0:
-                self.game_over = True
-                self.winner = "Black"
+
+        if self.online:
+            if self.turn == self.my_color:
+                if self.turn == "white":
+                    self.white_time = max(0, self.white_time - elapsed)
+                    if self.white_time == 0:
+                        self.game_over = True
+                        self.winner = "Black"
+                else:
+                    self.black_time = max(0, self.black_time - elapsed)
+                    if self.black_time == 0:
+                        self.game_over = True
+                        self.winner = "White"
+            else:
+                # Simulation du timer adverse pour affichage fluide
+                if self.turn == "white":
+                    self.white_time = max(0, self.white_time - elapsed)
+                else:
+                    self.black_time = max(0, self.black_time - elapsed)
         else:
-            self.black_time = max(0, self.black_time - elapsed)
-            if self.black_time == 0:
-                self.game_over = True
-                self.winner = "White"
+            # Mode local 1v1
+            if self.turn == "white":
+                self.white_time = max(0, self.white_time - elapsed)
+                if self.white_time == 0:
+                    self.game_over = True
+                    self.winner = "Black"
+            else:
+                self.black_time = max(0, self.black_time - elapsed)
+                if self.black_time == 0:
+                    self.game_over = True
+                    self.winner = "White"
+
 
     def draw(self, win):
         win.fill((30, 30, 30))
@@ -204,7 +248,7 @@ class Game:
         if self.game_over:
             if self.back_to_menu_button_rect.collidepoint(pos):
                 import menu
-                menu.main_menu()
+                menu.show_menu(self.auth_data)
             return
 
         if self.quit_button_rect.collidepoint(pos):
@@ -214,28 +258,50 @@ class Game:
         col = (pos[0] - BOARD_OFFSET_X) // SQUARE_SIZE
         row = (pos[1] - BOARD_OFFSET_Y) // SQUARE_SIZE
 
-        if 0 <= col < BOARD_COLS and 0 <= row < BOARD_ROWS:
-            piece = self.board[row][col]
+        if not (0 <= col < BOARD_COLS and 0 <= row < BOARD_ROWS):
+            return
 
-            if self.selected_piece:
-                if (row, col) in self.valid_moves:
-                    target = self.board[row][col]
-                    if target:
-                        if target.color == "white":
-                            self.captured_black.append(target.name)
-                        else:
-                            self.captured_white.append(target.name)
-                    self.move_piece(self.selected_piece, row, col)
-                    self.handle_promotion(self.selected_piece)
-                    self.update_clock()
-                    self.turn = "black" if self.turn == "white" else "white"
-                    self.last_tick = pygame.time.get_ticks()
-                    self.check_game_end()
-                self.selected_piece = None
-                self.valid_moves = []
-            elif piece and piece.color == self.turn:
-                self.selected_piece = piece
-                self.valid_moves = self.get_legal_moves(piece)
+        piece = self.board[row][col]
+
+        # ❌ En ligne, on ne joue que si c'est notre tour
+        if self.online:
+            if self.turn != self.my_color:
+                return  # ce n'est pas ton tour
+
+        if self.selected_piece:
+            if (row, col) in self.valid_moves:
+                target = self.board[row][col]
+                if target:
+                    if target.color == "white":
+                        self.captured_black.append(target.name)
+                    else:
+                        self.captured_white.append(target.name)
+
+                self.move_piece(self.selected_piece, row, col)
+                self.handle_promotion(self.selected_piece)
+                self.update_clock()
+                self.turn = "black" if self.turn == "white" else "white"
+                self.last_tick = pygame.time.get_ticks()
+                self.check_game_end()
+
+                # 🌐 Si mode en ligne : envoyer l'état
+                if self.online and self.ws:
+                    move_data = {
+                        "fen": self.to_fen(),
+                        "turn": self.turn,
+                        "white_time": self.white_time,
+                        "black_time": self.black_time
+                    }
+                    self.ws.send(json.dumps(move_data))
+
+
+            self.selected_piece = None
+            self.valid_moves = []
+
+        elif piece and piece.color == self.turn:
+            self.selected_piece = piece
+            self.valid_moves = self.get_legal_moves(piece)
+
 
     def move_piece(self, piece, row, col):
         self.board[piece.row][piece.col] = None
@@ -337,3 +403,127 @@ class Game:
         else:
             self.game_over = True
             self.winner = None
+
+    def to_fen(self):
+        piece_to_char = {
+            "pawn": "p", "rook": "r", "knight": "n", "bishop": "b", "queen": "q", "king": "k"
+        }
+
+        fen = ""
+        for row in self.board:
+            empty = 0
+            for piece in row:
+                if piece is None:
+                    empty += 1
+                else:
+                    if empty > 0:
+                        fen += str(empty)
+                        empty = 0
+                    symbol = piece_to_char[piece.name]
+                    fen += symbol.upper() if piece.color == "white" else symbol
+            if empty > 0:
+                fen += str(empty)
+            fen += "/"
+        fen = fen.rstrip("/") + f" {self.turn} - - 0 1"
+        return fen
+
+    def load_fen(self, fen):
+        from pieces import Pawn, Rook, Knight, Bishop, Queen, King
+
+        fen_parts = fen.split(" ")
+        rows = fen_parts[0].split("/")
+        self.turn = fen_parts[1]
+        self.board = [[None for _ in range(BOARD_COLS)] for _ in range(BOARD_ROWS)]
+
+        char_to_piece = {
+            "p": Pawn, "r": Rook, "n": Knight, "b": Bishop, "q": Queen, "k": King
+        }
+
+        for row_idx, row in enumerate(rows):
+            col_idx = 0
+            for char in row:
+                if char.isdigit():
+                    col_idx += int(char)
+                else:
+                    color = "white" if char.isupper() else "black"
+                    piece_class = char_to_piece[char.lower()]
+                    self.board[row_idx][col_idx] = piece_class(color, col_idx, row_idx)
+                    col_idx += 1
+
+    def connect_websocket(self):
+
+        def on_message(ws, message):
+            try:
+                data = json.loads(message)
+                self.load_fen(data["fen"])
+                self.turn = data["turn"]
+                self.white_time = data.get("white_time", self.white_time)
+                self.black_time = data.get("black_time", self.black_time)
+                self.last_tick = pygame.time.get_ticks()
+            except Exception as e:
+                print("Erreur réception WebSocket :", e)
+
+        ws_url = f"ws://localhost:8000/ws/games/{self.game_id}"
+        self.ws = websocket.WebSocketApp(ws_url, on_message=on_message)
+
+        thread = threading.Thread(target=self.ws.run_forever)
+        thread.daemon = True
+        thread.start()
+
+    def close(self):
+        if self.online and self.ws:
+            self.ws.close()
+
+    async def listen_to_server(self):
+        try:
+            async for message in self.ws:
+                data = json.loads(message)
+
+                if data["type"] == "update":
+                    fen = data.get("fen")
+                    turn = data.get("turn")
+                    white_time = data.get("white_time")
+                    black_time = data.get("black_time")
+                    winner = data.get("winner")
+                    game_over = data.get("game_over")
+
+                    if fen:
+                        self.board.set_fen(fen)
+                    if turn:
+                        self.turn = turn
+                    if white_time is not None:
+                        self.white_time = white_time
+                    if black_time is not None:
+                        self.black_time = black_time
+                    if winner:
+                        self.winner = winner
+                    if game_over is not None:
+                        self.game_over = game_over
+
+                    self.sync_clock()
+                    self.refresh_captured_pieces()
+
+        except Exception as e:
+            print("Erreur WebSocket : ", e)
+
+    def sync_clock(self):
+        self.last_tick = pygame.time.get_ticks()
+
+    def refresh_captured_pieces(self):
+        # Tu peux l’implémenter comme tu veux, exemple :
+        self.captured_white = self.board.get_captured("white")
+        self.captured_black = self.board.get_captured("black")
+
+    def simulate_opponent_timer(self):
+        if self.game_mode != "online":
+            return
+
+        # On simule uniquement si c’est le tour de l’adversaire
+        if self.current_turn != self.my_color:
+            elapsed = time.time() - self.last_update_time
+            if self.current_turn == "white":
+                self.white_time_left -= elapsed
+            else:
+                self.black_time_left -= elapsed
+            self.last_update_time = time.time()
+
