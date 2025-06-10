@@ -45,7 +45,7 @@ def online_main(game_id, auth_data, player_color):
     game = Game(
         game_mode="online",
         theme=((186, 202, 68), (118, 150, 86)),  # ou récupère-le selon ton menu
-        time_limit=300,                         # ou rends ça paramétrable aussi
+        time_limit=30,                         # ou rends ça paramétrable aussi
         auth_data=auth_data,
         game_id=game_id,
         player_color=player_color

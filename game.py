@@ -92,11 +92,37 @@ class Game:
                     if self.white_time == 0:
                         self.game_over = True
                         self.winner = "Black"
+
+                        if self.ws:
+                            move_data = {
+                                "fen": self.to_fen(),
+                                "turn": self.turn,
+                                "white_time": self.white_time,
+                                "black_time": self.black_time,
+                                "captured_white": self.captured_white,
+                                "captured_black": self.captured_black,
+                                "game_over": self.game_over,
+                                "winner": self.winner,
+                            }
+                            self.ws.send(json.dumps(move_data))
                 else:
                     self.black_time = max(0, self.black_time - elapsed)
                     if self.black_time == 0:
                         self.game_over = True
                         self.winner = "White"
+
+                        if self.ws:
+                            move_data = {
+                                "fen": self.to_fen(),
+                                "turn": self.turn,
+                                "white_time": self.white_time,
+                                "black_time": self.black_time,
+                                "captured_white": self.captured_white,
+                                "captured_black": self.captured_black,
+                                "game_over": self.game_over,
+                                "winner": self.winner,
+                            }
+                            self.ws.send(json.dumps(move_data))
             else:
                 # Simulation du timer adverse pour affichage fluide
                 if self.turn == "white":
@@ -124,6 +150,13 @@ class Game:
         self.draw_captured(win)
         self.draw_timers(win)
         self.draw_quit_button(win)
+        if self.online:
+            font = pygame.font.SysFont("Segoe UI", 24, bold=False)
+            color_text = "Blancs" if self.my_color == "white" else "Noirs"
+            is_turn = self.turn == self.my_color
+            turn_text = f"Vous êtes les {color_text} – {'à vous de jouer' if is_turn else 'en attente...'}"
+            label = font.render(turn_text, True, (255, 255, 255))
+            win.blit(label, (20, HEIGHT - 40))
         if self.quit_popup:
             self.draw_quit_popup(win)
         if self.game_over:
@@ -290,7 +323,11 @@ class Game:
                         "fen": self.to_fen(),
                         "turn": self.turn,
                         "white_time": self.white_time,
-                        "black_time": self.black_time
+                        "black_time": self.black_time,
+                        "captured_white": self.captured_white,
+                        "captured_black": self.captured_black,
+                        "game_over": self.game_over,
+                        "winner": self.winner,
                     }
                     self.ws.send(json.dumps(move_data))
 
@@ -404,6 +441,19 @@ class Game:
             self.game_over = True
             self.winner = None
 
+        if self.online and self.ws:
+            move_data = {
+                "fen": self.to_fen(),
+                "turn": self.turn,
+                "white_time": self.white_time,
+                "black_time": self.black_time,
+                "captured_white": self.captured_white,
+                "captured_black": self.captured_black,
+                "game_over": self.game_over,
+                "winner": self.winner,
+            }
+            self.ws.send(json.dumps(move_data))
+
     def to_fen(self):
         piece_to_char = {
             "pawn": "p", "rook": "r", "knight": "n", "bishop": "b", "queen": "q", "king": "k"
@@ -459,6 +509,10 @@ class Game:
                 self.turn = data["turn"]
                 self.white_time = data.get("white_time", self.white_time)
                 self.black_time = data.get("black_time", self.black_time)
+                self.captured_white = data.get("captured_white", [])
+                self.captured_black = data.get("captured_black", [])
+                self.game_over = data.get("game_over", False)
+                self.winner = data.get("winner", None)
                 self.last_tick = pygame.time.get_ticks()
             except Exception as e:
                 print("Erreur réception WebSocket :", e)
@@ -527,3 +581,13 @@ class Game:
                 self.black_time_left -= elapsed
             self.last_update_time = time.time()
 
+    def handle_server_update(self, data):
+        self.load_fen(data["fen"])
+        self.turn = data["turn"]
+        self.white_time = data["white_time"]
+        self.black_time = data["black_time"]
+        self.captured_white = data.get("captured_white", [])
+        self.captured_black = data.get("captured_black", [])
+        self.game_over = data.get("game_over", False)
+        self.winner = data.get("winner", None)
+        self.last_tick = pygame.time.get_ticks()
